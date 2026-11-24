@@ -30,9 +30,29 @@ urlpatterns = [
         name="download_playlist",
     ),
     path(
+        "playlists/<slug:slug>/genuine-mix/",
+        views.save_genuine_mix_settings,
+        name="save_genuine_mix_settings",
+    ),
+    path(
+        "playlists/<slug:slug>/genuine-mix/generate/",
+        views.generate_genuine_mix,
+        name="generate_genuine_mix",
+    ),
+    path(
+        "playlists/<slug:slug>/genuine-mix/download/",
+        views.download_genuine_mix,
+        name="download_genuine_mix",
+    ),
+    path(
         "playlists/<slug:slug>/sync/",
         views.request_playlist_sync,
         name="request_playlist_sync",
+    ),
+    path(
+        "playlists/<slug:slug>/sync/recover/",
+        views.recover_playlist_sync,
+        name="recover_playlist_sync",
     ),
     path(
         "playlists/<slug:slug>/tracks/<int:track_id>/move/<str:direction>/",

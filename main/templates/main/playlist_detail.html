@@ -22,6 +22,14 @@
       </div>
     </section>
 
+    <div class="playlist-tabs" role="tablist" aria-label="Playlist sections">
+      <button id="tracks-tab" class="playlist-tab" type="button" role="tab" aria-selected="true" aria-controls="tracks-panel" data-playlist-tab="tracks">Tracks</button>
+      {% if can_manage and playlist.rights_confirmed %}
+        <button id="mix-tab" class="playlist-tab" type="button" role="tab" aria-selected="false" aria-controls="mix-panel" tabindex="-1" data-playlist-tab="mix">Genuine Mix</button>
+      {% endif %}
+    </div>
+
+    <section id="tracks-panel" class="playlist-tab-panel" role="tabpanel" aria-labelledby="tracks-tab" data-playlist-panel="tracks">
     <section class="tracks-section">
       <div class="tracks-toolbar">
         <div>
@@ -39,6 +47,12 @@
                 {% if playlist.sync_status == "pending" %}Queued…{% elif playlist.sync_status == "syncing" %}Syncing…{% else %}Sync playlist ↻{% endif %}
               </button>
             </form>
+            {% if playlist.sync_status == "syncing" %}
+              <form method="post" action="{% url 'recover_playlist_sync' playlist.slug %}" onsubmit="return confirm('Only clear this status if the sync worker has stopped or this playlist has already finished syncing.');">
+                {% csrf_token %}
+                <button class="button button-outline" type="submit">Clear stuck status</button>
+              </form>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -92,6 +106,69 @@
           {% if can_manage and playlist.rights_confirmed %}<span>Sync this playlist to add its music.</span>{% endif %}
         </div>
       {% endif %}
+
     </section>
+    </section>
+
+    {% if can_manage and playlist.rights_confirmed %}
+      <section id="mix-panel" class="playlist-tab-panel genuine-mix" role="tabpanel" aria-labelledby="mix-tab" data-playlist-panel="mix" hidden>
+        <div class="mix-heading">
+          <div>
+            <p class="eyebrow">YOUR EDIT, ONE MP3</p>
+            <h2 id="genuine-mix-heading">Genuine Mix</h2>
+            <p class="mix-help">Choose tracks and trim points. Silence is removed before trims are applied; mix order follows the track list above.</p>
+          </div>
+        </div>
+
+        <form id="genuine-mix-form" method="post" action="{% url 'save_genuine_mix_settings' playlist.slug %}" data-persist-submit data-genuine-mix-form>
+          {% csrf_token %}
+          <label class="crossfade-setting" for="crossfade-seconds">
+            Crossfade
+            <input id="crossfade-seconds" type="number" name="crossfade_seconds" min="0" max="30" step="0.5" value="{{ playlist.crossfade_seconds }}" required>
+            <span>seconds</span>
+          </label>
+
+          <div class="mix-selection-actions" aria-label="Track selection">
+            <button class="button button-outline" type="button" data-mix-select="all">Check all</button>
+            <button class="button button-outline" type="button" data-mix-select="none">Uncheck all</button>
+          </div>
+
+          <div class="mix-track-list">
+            {% for track in tracks %}
+              <div class="mix-track">
+                <input type="hidden" name="track_ids" value="{{ track.pk }}">
+                <label class="mix-include">
+                  <input type="checkbox" name="include_{{ track.pk }}" {% if track.availability == "available" and track.audio_file %}data-mix-include {% if track.include_in_mix %}checked{% endif %}{% else %}disabled{% endif %}>
+                  <span>{{ track.title }}</span>
+                </label>
+                {% if track.availability != "available" or not track.audio_file %}
+                  <span class="mix-unavailable">Unavailable</span>
+                {% endif %}
+                <label>
+                  <span>Start (sec)</span>
+                  <input type="number" name="start_{{ track.pk }}" min="0" step="0.1" value="{{ track.mix_start_seconds }}" required>
+                </label>
+                <label>
+                  <span>End (sec)</span>
+                  <input type="number" name="end_{{ track.pk }}" min="0" step="0.1" value="{{ track.mix_end_seconds|default_if_none:'' }}" placeholder="End of track">
+                </label>
+              </div>
+            {% empty %}
+              <p class="mix-help">Sync available tracks before creating a mix.</p>
+            {% endfor %}
+          </div>
+          <button class="button button-outline" type="submit">Save mix settings</button>
+          <div class="mix-actions">
+            <button class="button button-primary" type="submit" formaction="{% url 'generate_genuine_mix' playlist.slug %}" data-genuine-mix-button>Generate Genuine Mix</button>
+            <p class="mix-generation-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+        <div class="mix-actions">
+          {% if playlist.mix_file %}
+            <a class="button button-outline" href="{% url 'download_genuine_mix' playlist.slug %}" data-no-persist-navigation>Download Genuine Mix <span aria-hidden="true">↓</span></a>
+          {% endif %}
+        </div>
+      </section>
+    {% endif %}
   </main>
 {% endblock %}

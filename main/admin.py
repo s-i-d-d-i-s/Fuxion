@@ -15,6 +15,9 @@ class TrackInline(admin.TabularInline):
         "audio_file",
         "sort_order",
         "rights_confirmed",
+        "include_in_mix",
+        "mix_start_seconds",
+        "mix_end_seconds",
     )
     readonly_fields = ("source_video_id", "availability", "unavailable_reason")
     show_change_link = True
@@ -31,6 +34,7 @@ class PlaylistAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {"fields": ("title", "slug", "source_url", "description", "category")}),
         ("Library", {"fields": ("featured", "rights_confirmed")}),
+        ("Genuine Mix", {"fields": ("crossfade_seconds",)}),
         (
             "Sync status",
             {"fields": ("sync_status", "last_synced", "sync_error", "created_at")},
@@ -47,10 +51,17 @@ class PlaylistAdmin(admin.ModelAdmin):
 
 @admin.register(Track)
 class TrackAdmin(admin.ModelAdmin):
-    list_display = ("title", "playlist", "availability", "source_video_id", "sort_order")
-    list_filter = ("availability", "playlist__category")
+    list_display = (
+        "title",
+        "playlist",
+        "availability",
+        "source_video_id",
+        "sort_order",
+        "include_in_mix",
+    )
+    list_filter = ("availability", "include_in_mix", "playlist__category")
     search_fields = ("title", "playlist__title")
-    list_editable = ("sort_order",)
+    list_editable = ("sort_order", "include_in_mix")
     readonly_fields = ("source_video_id", "availability", "unavailable_reason")
 
     def has_delete_permission(self, request, obj=None):

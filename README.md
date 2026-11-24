@@ -2,6 +2,9 @@
 
 Fuxion is a personal YouTube Music library. It stores playlist audio locally,
 keeps your track order, streams it in the browser, and downloads playlists as ZIPs.
+Studio users can also configure a Genuine Mix: choose included tracks, set trim
+points after edge-silence removal, set a 0–30 second crossfade, and generate one MP3
+in the playlist's displayed order.
 Sync is additive: it never removes or reorders existing tracks. Removing a track
 in Studio deletes its local file and keeps it excluded from later syncs.
 Unavailable playlist entries are kept in the tracklist with their status and error;
@@ -47,6 +50,11 @@ Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Sign in at
 [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/), add a playlist,
 and confirm that you own or may download its music. Open the playlist in Fuxion
 and select **Sync playlist**. Keep the worker running while syncs are queued.
+To create a Genuine Mix, configure inclusion and trim points on the playlist page,
+save the settings, and select **Generate Genuine Mix**. FFmpeg processes the mix
+during that request; the page reports that it is working, then starts the MP3
+download when it finishes. Mix creation is limited to 100 tracks and 2 GB of
+source audio per request.
 
 ## Production
 

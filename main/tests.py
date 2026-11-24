@@ -13,6 +13,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from .genuine_mix import _mix_filter
 from .models import Playlist, PlaylistExclusion, Track
 
 
@@ -130,6 +131,85 @@ class PlaylistCatalogTests(TestCase):
             self.assertEqual(archive.read("01-first-track.mp3"), b"first")
             self.assertEqual(archive.read("02-second-track.mp3"), b"second")
 
+    def test_genuine_mix_settings_are_saved_for_each_track(self):
+        playlist = self.make_playlist(rights_confirmed=True)
+        track = self.make_track(playlist)
+        self.client.force_login(self.make_staff_user())
+
+        response = self.client.post(
+            reverse("save_genuine_mix_settings", kwargs={"slug": playlist.slug}),
+            {
+                "crossfade_seconds": "7.5",
+                "track_ids": str(track.pk),
+                f"include_{track.pk}": "on",
+                f"start_{track.pk}": "2.5",
+                f"end_{track.pk}": "18",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        playlist.refresh_from_db()
+        track.refresh_from_db()
+        self.assertEqual(playlist.crossfade_seconds, 7.5)
+        self.assertTrue(track.include_in_mix)
+        self.assertEqual(track.mix_start_seconds, 2.5)
+        self.assertEqual(track.mix_end_seconds, 18)
+
+    def test_unavailable_tracks_are_disabled_and_bulk_selection_controls_exist(self):
+        playlist = self.make_playlist(rights_confirmed=True)
+        unavailable = Track.objects.create(
+            playlist=playlist,
+            title="Unavailable song",
+            availability=Track.Availability.UNAVAILABLE,
+            rights_confirmed=True,
+        )
+        self.client.force_login(self.make_staff_user())
+
+        response = self.client.get(
+            reverse("playlist_detail", kwargs={"slug": playlist.slug})
+        )
+
+        self.assertContains(response, "Check all")
+        self.assertContains(response, "Uncheck all")
+        self.assertContains(response, f'name="include_{unavailable.pk}" disabled')
+        self.assertNotContains(response, f'name="include_{unavailable.pk}" checked')
+
+    def test_genuine_mix_generation_saves_settings_before_processing(self):
+        playlist = self.make_playlist(rights_confirmed=True)
+        track = self.make_track(playlist)
+        self.client.force_login(self.make_staff_user())
+
+        with patch("main.views.save_genuine_mix") as generate:
+            response = self.client.post(
+                reverse("generate_genuine_mix", kwargs={"slug": playlist.slug}),
+                {
+                    "crossfade_seconds": "4",
+                    "track_ids": str(track.pk),
+                    f"include_{track.pk}": "on",
+                    f"start_{track.pk}": "1",
+                    f"end_{track.pk}": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["download_url"],
+            reverse("download_genuine_mix", kwargs={"slug": playlist.slug}),
+        )
+        playlist.refresh_from_db()
+        track.refresh_from_db()
+        self.assertEqual(playlist.crossfade_seconds, 4)
+        self.assertEqual(track.mix_start_seconds, 1)
+        generate.assert_called_once()
+
+    def test_genuine_mix_filter_crossfades_in_track_order(self):
+        self.assertEqual(
+            _mix_filter(3, 5),
+            "[0:a][1:a]acrossfade=d=5:c1=tri:c2=tri[mix1];"
+            "[mix1][2:a]acrossfade=d=5:c1=tri:c2=tri[out]",
+        )
+        self.assertEqual(_mix_filter(2, 0), "[0:a][1:a]concat=n=2:v=0:a=1[out]")
+
     def test_unavailable_tracks_are_visible_but_not_played_or_zipped(self):
         playlist = self.make_playlist()
         available = self.make_track(playlist, title="Playable")
@@ -207,6 +287,30 @@ class PlaylistCatalogTests(TestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Playlist.objects.get(pk=playlist.pk).sync_status, "pending")
+
+    def test_staff_can_clear_a_stuck_sync_status(self):
+        playlist = self.make_playlist(rights_confirmed=True, sync_status="syncing")
+        self.client.force_login(self.make_staff_user())
+
+        response = self.client.post(
+            reverse("recover_playlist_sync", kwargs={"slug": playlist.slug})
+        )
+
+        self.assertEqual(response.status_code, 302)
+        playlist.refresh_from_db()
+        self.assertEqual(playlist.sync_status, "idle")
+        self.assertEqual(playlist.sync_error, "")
+
+    def test_recover_sync_does_not_change_other_sync_states(self):
+        playlist = self.make_playlist(rights_confirmed=True, sync_status="pending")
+        self.client.force_login(self.make_staff_user())
+
+        self.client.post(
+            reverse("recover_playlist_sync", kwargs={"slug": playlist.slug})
+        )
+
+        playlist.refresh_from_db()
+        self.assertEqual(playlist.sync_status, "pending")
 
     def test_reorder_controls_persist_track_order(self):
         playlist = self.make_playlist()
