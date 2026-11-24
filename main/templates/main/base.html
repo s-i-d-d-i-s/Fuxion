@@ -1,0 +1,169 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151713">
+  <title>{% block title %}Fuxion — your music library{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'main/favicon.svg' %}">
+  <link rel="stylesheet" href="{% static 'main/catalog.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="wordmark" href="{% url 'playlist_list' %}"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>fuxion<span class="wordmark-period">.</span></a>
+    <a class="header-link" href="/admin/">Studio <span aria-hidden="true">↗</span></a>
+  </header>
+
+  {% block content %}{% endblock %}
+
+  <aside class="player-dock" id="player-dock" hidden aria-label="Music player">
+    <div class="player-track"><span class="player-note" aria-hidden="true">♫</span><span id="player-title">Choose a track</span></div>
+    <audio id="audio-player" controls preload="metadata"></audio>
+  </aside>
+
+  <footer class="site-footer"><span>FUXION</span><span>YOUR MUSIC, KEPT IN ORDER.</span></footer>
+  <script>
+    (() => {
+      const audio = document.getElementById("audio-player");
+      const dock = document.getElementById("player-dock");
+      const title = document.getElementById("player-title");
+      let activeSrc = "";
+      let activeTitle = "";
+      let syncTimer;
+
+      function currentButtons() {
+        return [...document.querySelectorAll("[data-play-track]")];
+      }
+
+      function updatePlayButtons() {
+        currentButtons().forEach((button) => {
+          const playing = button.dataset.src === activeSrc && !audio.paused;
+          button.querySelector("span").textContent = playing ? "Ⅱ" : "▶";
+          button.setAttribute(
+            "aria-label",
+            `${playing ? "Pause" : "Play"} ${button.dataset.title}`
+          );
+          button.setAttribute("aria-pressed", String(playing));
+        });
+      }
+
+      function playTrack(button) {
+        activeSrc = button.dataset.src;
+        activeTitle = button.dataset.title;
+        title.textContent = activeTitle;
+        dock.hidden = false;
+        updatePlayButtons();
+        if (audio.src !== new URL(activeSrc, location.href).href) {
+          audio.src = activeSrc;
+        }
+        audio.play().catch(() => {
+          title.textContent = `${activeTitle} · press play to start`;
+        });
+      }
+
+      async function visit(url, { pushState = true, scroll = true } = {}) {
+        try {
+          const response = await fetch(url, { headers: { "X-Requested-With": "fetch" } });
+          if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
+            location.assign(url);
+            return;
+          }
+
+          const page = new DOMParser().parseFromString(await response.text(), "text/html");
+          const nextMain = page.querySelector("main[data-page-content]");
+          const currentMain = document.querySelector("main[data-page-content]");
+          if (!nextMain || !currentMain) {
+            location.assign(url);
+            return;
+          }
+
+          currentMain.replaceWith(nextMain);
+          document.title = page.title;
+          if (pushState) history.pushState({}, "", response.url);
+          if (scroll) window.scrollTo(0, 0);
+          updatePlayButtons();
+          scheduleSyncRefresh();
+        } catch {
+          location.assign(url);
+        }
+      }
+
+      function scheduleSyncRefresh() {
+        window.clearTimeout(syncTimer);
+        if (document.querySelector("[data-sync-active='true']")) {
+          syncTimer = window.setTimeout(
+            () => visit(location.href, { pushState: false, scroll: false }),
+            5000
+          );
+        }
+      }
+
+      document.addEventListener("click", (event) => {
+        const playButton = event.target.closest("[data-play-track]");
+        if (playButton) {
+          event.preventDefault();
+          if (playButton.dataset.src === activeSrc && !audio.paused) audio.pause();
+          else playTrack(playButton);
+          return;
+        }
+
+        const link = event.target.closest("a[href]");
+        if (
+          !link ||
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          link.target ||
+          link.hasAttribute("data-no-persist-navigation") ||
+          link.hasAttribute("download")
+        ) return;
+
+        const url = new URL(link.href, location.href);
+        if (
+          url.origin !== location.origin ||
+          url.pathname.startsWith("/admin/") ||
+          (url.pathname === location.pathname &&
+            url.search === location.search &&
+            url.hash)
+        ) return;
+
+        event.preventDefault();
+        visit(url.href);
+      });
+
+      document.addEventListener("submit", (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || form.method.toLowerCase() !== "get") return;
+        const url = new URL(form.action, location.href);
+        if (url.origin !== location.origin || url.pathname.startsWith("/admin/")) return;
+        for (const [key, value] of new FormData(form)) {
+          if (value instanceof File) continue;
+          url.searchParams.append(key, value);
+        }
+        event.preventDefault();
+        visit(url.href);
+      });
+
+      document.addEventListener("popstate", () => {
+        visit(location.href, { pushState: false });
+      });
+      audio.addEventListener("play", updatePlayButtons);
+      audio.addEventListener("pause", updatePlayButtons);
+      audio.addEventListener("ended", () => {
+        const buttons = currentButtons();
+        const index = buttons.findIndex((button) =>
+          new URL(button.dataset.src, location.href).href ===
+          new URL(activeSrc, location.href).href
+        );
+        if (index >= 0 && index + 1 < buttons.length) playTrack(buttons[index + 1]);
+      });
+
+      scheduleSyncRefresh();
+    })();
+  </script>
+</body>
+</html>

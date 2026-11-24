@@ -1,21 +1,7 @@
-{% load static %}
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#151713">
-  <title>Fuxion — your music library</title>
-  <link rel="icon" type="image/svg+xml" href="{% static 'main/favicon.svg' %}">
-  <link rel="stylesheet" href="{% static 'main/catalog.css' %}">
-</head>
-<body>
-  <header class="site-header">
-    <a class="wordmark" href="{% url 'playlist_list' %}"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>fuxion<span class="wordmark-period">.</span></a>
-    <a class="header-link" href="/admin/">Studio <span aria-hidden="true">↗</span></a>
-  </header>
+{% extends "main/base.html" %}
 
-  <main class="library">
+{% block content %}
+  <main class="library" data-page-content>
     <section class="page-heading">
       <div>
         <p class="eyebrow">YOUR MUSIC, IN ONE PLACE</p>
@@ -62,7 +48,4 @@
       {% endfor %}
     </section>
   </main>
-
-  <footer class="site-footer"><span>FUXION</span><span>YOUR MUSIC, KEPT IN ORDER.</span></footer>
-</body>
-</html>
+{% endblock %}

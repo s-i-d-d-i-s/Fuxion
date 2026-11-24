@@ -1,21 +1,9 @@
-{% load static %}
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#151713">
-  <title>{{ playlist.title }} — Fuxion</title>
-  <link rel="icon" type="image/svg+xml" href="{% static 'main/favicon.svg' %}">
-  <link rel="stylesheet" href="{% static 'main/catalog.css' %}">
-</head>
-<body>
-  <header class="site-header">
-    <a class="wordmark" href="{% url 'playlist_list' %}"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>fuxion<span class="wordmark-period">.</span></a>
-    <a class="header-link" href="/admin/">Studio <span aria-hidden="true">↗</span></a>
-  </header>
+{% extends "main/base.html" %}
 
-  <main class="detail" data-sync-active="{% if playlist.sync_status == 'pending' or playlist.sync_status == 'syncing' %}true{% else %}false{% endif %}">
+{% block title %}{{ playlist.title }} — Fuxion{% endblock %}
+
+{% block content %}
+  <main class="detail" data-page-content data-sync-active="{% if playlist.sync_status == 'pending' or playlist.sync_status == 'syncing' %}true{% else %}false{% endif %}">
     <a class="back-link" href="{% url 'playlist_list' %}">← <span>Library</span></a>
 
     {% if messages %}
@@ -42,7 +30,7 @@
         </div>
         <div class="toolbar-actions">
           {% if tracks %}
-            <a class="button button-outline" href="{% url 'download_playlist' playlist.slug %}">Download ZIP <span aria-hidden="true">↓</span></a>
+            <a class="button button-outline" href="{% url 'download_playlist' playlist.slug %}" data-no-persist-navigation>Download ZIP <span aria-hidden="true">↓</span></a>
           {% endif %}
           {% if can_manage %}
             <form method="post" action="{% url 'request_playlist_sync' playlist.slug %}">
@@ -106,65 +94,4 @@
       {% endif %}
     </section>
   </main>
-
-  <aside class="player-dock" id="player-dock" hidden aria-label="Music player">
-    <div class="player-track"><span class="player-note" aria-hidden="true">♫</span><span id="player-title">Choose a track</span></div>
-    <audio id="audio-player" controls preload="metadata"></audio>
-  </aside>
-
-  <footer class="site-footer"><span>FUXION</span><span>YOUR MUSIC, KEPT IN ORDER.</span></footer>
-  <script>
-    (() => {
-      const audio = document.getElementById("audio-player");
-      const dock = document.getElementById("player-dock");
-      const title = document.getElementById("player-title");
-      const buttons = [...document.querySelectorAll("[data-play-track]")];
-      let activeIndex = -1;
-
-      function updatePlayButtons() {
-        buttons.forEach((button, index) => {
-          const playing = index === activeIndex && !audio.paused;
-          button.querySelector("span").textContent = playing ? "Ⅱ" : "▶";
-          button.setAttribute(
-            "aria-label",
-            `${playing ? "Pause" : "Play"} ${button.dataset.title}`
-          );
-          button.setAttribute("aria-pressed", String(playing));
-        });
-      }
-
-      function playAt(index) {
-        const button = buttons[index];
-        if (!button) return;
-        activeIndex = index;
-        title.textContent = button.dataset.title;
-        dock.hidden = false;
-        updatePlayButtons();
-        if (audio.src !== new URL(button.dataset.src, location.href).href) {
-          audio.src = button.dataset.src;
-        }
-        audio.play().catch(() => {
-          title.textContent = `${button.dataset.title} · press play to start`;
-        });
-      }
-
-      buttons.forEach((button, index) => {
-        button.addEventListener("click", () => {
-          if (activeIndex === index && !audio.paused) audio.pause();
-          else playAt(index);
-        });
-      });
-
-      audio.addEventListener("play", updatePlayButtons);
-      audio.addEventListener("pause", updatePlayButtons);
-      audio.addEventListener("ended", () => {
-        if (activeIndex >= 0 && activeIndex + 1 < buttons.length) playAt(activeIndex + 1);
-      });
-
-      if (document.querySelector("[data-sync-active='true']")) {
-        window.setTimeout(() => window.location.reload(), 5000);
-      }
-    })();
-  </script>
-</body>
-</html>
+{% endblock %}
