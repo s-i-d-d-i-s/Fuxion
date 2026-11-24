@@ -14,7 +14,6 @@ class TrackInline(admin.TabularInline):
         "unavailable_reason",
         "audio_file",
         "sort_order",
-        "rights_confirmed",
         "include_in_mix",
         "mix_start_seconds",
         "mix_end_seconds",
@@ -25,15 +24,14 @@ class TrackInline(admin.TabularInline):
 
 @admin.register(Playlist)
 class PlaylistAdmin(admin.ModelAdmin):
-    list_display = ("title", "category", "sync_status", "track_count", "created_at")
-    list_filter = ("category", "featured")
-    search_fields = ("title", "description", "source_url")
+    list_display = ("title", "sync_status", "track_count", "created_at")
+    list_filter = ("featured",)
+    search_fields = ("title", "source_url")
     prepopulated_fields = {"slug": ("title",)}
     readonly_fields = ("created_at", "sync_status", "last_synced", "sync_error")
     inlines = (TrackInline,)
     fieldsets = (
-        (None, {"fields": ("title", "slug", "source_url", "description", "category")}),
-        ("Library", {"fields": ("featured", "rights_confirmed")}),
+        (None, {"fields": ("title", "slug", "source_url", "featured")}),
         ("Genuine Mix", {"fields": ("crossfade_seconds",)}),
         (
             "Sync status",
@@ -44,7 +42,6 @@ class PlaylistAdmin(admin.ModelAdmin):
     @admin.display(description="Available tracks")
     def track_count(self, obj):
         return obj.tracks.filter(
-            rights_confirmed=True,
             availability=Track.Availability.AVAILABLE,
         ).count()
 
@@ -59,7 +56,7 @@ class TrackAdmin(admin.ModelAdmin):
         "sort_order",
         "include_in_mix",
     )
-    list_filter = ("availability", "include_in_mix", "playlist__category")
+    list_filter = ("availability", "include_in_mix", "playlist")
     search_fields = ("title", "playlist__title")
     list_editable = ("sort_order", "include_in_mix")
     readonly_fields = ("source_video_id", "availability", "unavailable_reason")

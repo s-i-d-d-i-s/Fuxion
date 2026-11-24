@@ -13,18 +13,17 @@
     {% endif %}
 
     <section class="playlist-heading">
-      <div class="detail-art art-{{ playlist.category }}" aria-hidden="true">♫</div>
+      <div class="detail-art" aria-hidden="true">♫</div>
       <div class="playlist-heading-copy">
-        <p class="eyebrow">{{ playlist.get_category_display }}{% if playlist.featured %} · FEATURED{% endif %}</p>
+        {% if playlist.featured %}<p class="eyebrow">FEATURED</p>{% endif %}
         <h1>{{ playlist.title }}<span class="wordmark-period">.</span></h1>
-        {% if playlist.description %}<p class="playlist-description">{{ playlist.description }}</p>{% endif %}
         <a class="source-link" href="{{ playlist.source_url }}" target="_blank" rel="noopener noreferrer">Open YouTube Music ↗</a>
       </div>
     </section>
 
     <div class="playlist-tabs" role="tablist" aria-label="Playlist sections">
       <button id="tracks-tab" class="playlist-tab" type="button" role="tab" aria-selected="true" aria-controls="tracks-panel" data-playlist-tab="tracks">Tracks</button>
-      {% if can_manage and playlist.rights_confirmed %}
+      {% if can_manage %}
         <button id="mix-tab" class="playlist-tab" type="button" role="tab" aria-selected="false" aria-controls="mix-panel" tabindex="-1" data-playlist-tab="mix">Genuine Mix</button>
       {% endif %}
     </div>
@@ -43,7 +42,7 @@
           {% if can_manage %}
             <form method="post" action="{% url 'request_playlist_sync' playlist.slug %}">
               {% csrf_token %}
-              <button class="button button-primary" type="submit" {% if playlist.sync_status == "pending" or playlist.sync_status == "syncing" or not playlist.rights_confirmed %}disabled{% endif %}>
+              <button class="button button-primary" type="submit" {% if playlist.sync_status == "pending" or playlist.sync_status == "syncing" %}disabled{% endif %}>
                 {% if playlist.sync_status == "pending" %}Queued…{% elif playlist.sync_status == "syncing" %}Syncing…{% else %}Sync playlist ↻{% endif %}
               </button>
             </form>
@@ -61,8 +60,6 @@
         <p class="sync-error" role="alert">{{ playlist.sync_error }}</p>
       {% elif playlist.sync_status == "pending" or playlist.sync_status == "syncing" %}
         <p class="sync-notice" role="status">Sync in progress. Your existing tracks and their order are safe.</p>
-      {% elif can_manage and not playlist.rights_confirmed %}
-        <p class="sync-notice" role="status">Confirm music rights in Studio before syncing.</p>
       {% endif %}
 
       {% if tracks %}
@@ -103,14 +100,14 @@
       {% else %}
         <div class="empty-tracks">
           <p>No tracks yet.</p>
-          {% if can_manage and playlist.rights_confirmed %}<span>Sync this playlist to add its music.</span>{% endif %}
+          {% if can_manage %}<span>Sync this playlist to add its music.</span>{% endif %}
         </div>
       {% endif %}
 
     </section>
     </section>
 
-    {% if can_manage and playlist.rights_confirmed %}
+    {% if can_manage %}
       <section id="mix-panel" class="playlist-tab-panel genuine-mix" role="tabpanel" aria-labelledby="mix-tab" data-playlist-panel="mix" hidden>
         <div class="mix-heading">
           <div>

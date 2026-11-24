@@ -22,17 +22,12 @@ def playlist_list(request):
     playlists = Playlist.objects.annotate(
         track_count=Count(
             "tracks",
-            filter=Q(
-                tracks__rights_confirmed=True,
-                tracks__availability=Track.Availability.AVAILABLE,
-            ),
+            filter=Q(tracks__availability=Track.Availability.AVAILABLE),
             distinct=True,
         )
     )
     if query:
-        playlists = playlists.filter(
-            Q(title__icontains=query) | Q(description__icontains=query)
-        )
+        playlists = playlists.filter(title__icontains=query)
     return render(
         request,
         "main/playlist_list.html",
@@ -42,9 +37,7 @@ def playlist_list(request):
 
 def playlist_detail(request, slug):
     playlist = get_object_or_404(Playlist, slug=slug)
-    tracks = playlist.tracks.filter(rights_confirmed=True).order_by(
-        "sort_order", "pk"
-    )
+    tracks = playlist.tracks.order_by("sort_order", "pk")
     return render(
         request,
         "main/playlist_detail.html",
@@ -56,7 +49,6 @@ def download_playlist(request, slug):
     playlist = get_object_or_404(Playlist, slug=slug)
     tracks = list(
         playlist.tracks.filter(
-            rights_confirmed=True,
             availability=Track.Availability.AVAILABLE,
         )
         .exclude(audio_file="")
@@ -102,7 +94,7 @@ def save_genuine_mix_settings(request, slug):
 
 def _apply_genuine_mix_settings(playlist, data):
     tracks = list(
-        playlist.tracks.filter(rights_confirmed=True).order_by("sort_order", "pk")
+        playlist.tracks.order_by("sort_order", "pk")
     )
     if set(data.getlist("track_ids")) != {str(track.pk) for track in tracks}:
         return "The track settings could not be verified. Please try again."
@@ -153,11 +145,6 @@ def generate_genuine_mix(request, slug):
         return HttpResponseNotAllowed(("POST",))
 
     playlist = get_object_or_404(Playlist, slug=slug)
-    if not playlist.rights_confirmed:
-        return JsonResponse(
-            {"error": "Confirm music rights in Studio before generating a mix."},
-            status=400,
-        )
     error = _apply_genuine_mix_settings(playlist, request.POST)
     if error:
         return JsonResponse({"error": error}, status=400)
@@ -203,13 +190,6 @@ def request_playlist_sync(request, slug):
         return redirect("playlist_detail", slug=slug)
 
     playlist = get_object_or_404(Playlist, slug=slug)
-    if not playlist.rights_confirmed:
-        messages.error(
-            request,
-            "Confirm that you own or may download this playlist in Studio before syncing.",
-        )
-        return redirect("playlist_detail", slug=playlist.slug)
-
     updated = Playlist.objects.filter(pk=playlist.pk, sync_status__in=("idle", "failed")).update(
         sync_status="pending",
         sync_error="",
@@ -255,7 +235,7 @@ def move_track(request, slug, track_id, direction):
     with transaction.atomic():
         tracks = list(
             Track.objects.select_for_update()
-            .filter(playlist=playlist, rights_confirmed=True)
+            .filter(playlist=playlist)
             .order_by("sort_order", "pk")
         )
         index = next(

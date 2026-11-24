@@ -29,7 +29,6 @@ class PlaylistCatalogTests(TestCase):
         defaults = {
             "title": "Late Night Drive",
             "source_url": "https://music.youtube.com/playlist?list=PLabcdefghijk",
-            "category": Playlist.Category.POP,
         }
         defaults.update(kwargs)
         return Playlist.objects.create(**defaults)
@@ -38,7 +37,6 @@ class PlaylistCatalogTests(TestCase):
         self,
         playlist,
         title="Night Lights",
-        cleared=True,
         content=b"audio",
         source_video_id="",
         sort_order=0,
@@ -48,7 +46,6 @@ class PlaylistCatalogTests(TestCase):
             title=title,
             source_video_id=source_video_id,
             audio_file=SimpleUploadedFile(f"{title}.mp3", content),
-            rights_confirmed=cleared,
             sort_order=sort_order,
         )
 
@@ -70,7 +67,7 @@ class PlaylistCatalogTests(TestCase):
         with self.assertRaises(ValidationError):
             playlist.full_clean()
 
-    def test_studio_can_add_a_rights_confirmed_youtube_playlist(self):
+    def test_studio_can_add_a_youtube_playlist(self):
         self.client.force_login(self.make_staff_user())
         response = self.client.post(
             reverse("admin:main_playlist_add"),
@@ -78,9 +75,7 @@ class PlaylistCatalogTests(TestCase):
                 "title": "Studio Playlist",
                 "slug": "",
                 "source_url": "https://music.youtube.com/playlist?list=PLabcdefghijk",
-                "description": "",
-                "category": Playlist.Category.POP,
-                "rights_confirmed": "on",
+                "crossfade_seconds": "5",
                 "tracks-TOTAL_FORMS": "0",
                 "tracks-INITIAL_FORMS": "0",
                 "tracks-MIN_NUM_FORMS": "0",
@@ -92,24 +87,23 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(response.status_code, 302)
         playlist = Playlist.objects.get(title="Studio Playlist")
         self.assertEqual(playlist.slug, "studio-playlist")
-        self.assertTrue(playlist.rights_confirmed)
 
-    def test_catalog_search_filters_and_counts_playable_tracks(self):
-        playlist = self.make_playlist(description="A mellow night mix")
+    def test_catalog_searches_titles_and_counts_available_tracks(self):
+        playlist = self.make_playlist()
         self.make_track(playlist)
-        self.make_track(playlist, title="Uncleared track", cleared=False)
+        self.make_track(playlist, title="Another track")
 
-        response = self.client.get(reverse("playlist_list"), {"q": "mellow"})
+        response = self.client.get(reverse("playlist_list"), {"q": "Late Night"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Late Night Drive")
-        self.assertEqual(response.context["playlists"][0].track_count, 1)
+        self.assertEqual(response.context["playlists"][0].track_count, 2)
 
     def test_detail_and_zip_follow_the_same_order(self):
         playlist = self.make_playlist()
         self.make_track(playlist, title="Second track", content=b"second", sort_order=1)
         self.make_track(playlist, title="First track", content=b"first", sort_order=0)
-        self.make_track(playlist, title="Not cleared", cleared=False, content=b"private")
+        self.make_track(playlist, title="Third track", content=b"third", sort_order=2)
 
         detail = self.client.get(
             reverse("playlist_detail", kwargs={"slug": playlist.slug})
@@ -121,18 +115,20 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(detail.status_code, 200)
         self.assertContains(detail, "data-play-track")
         self.assertContains(detail, "First track")
-        self.assertNotContains(detail, "Not cleared")
+        self.assertContains(detail, "Third track")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/zip")
         with zipfile.ZipFile(io.BytesIO(b"".join(response.streaming_content))) as archive:
             self.assertEqual(
-                archive.namelist(), ["01-first-track.mp3", "02-second-track.mp3"]
+                archive.namelist(),
+                ["01-first-track.mp3", "02-second-track.mp3", "03-third-track.mp3"],
             )
             self.assertEqual(archive.read("01-first-track.mp3"), b"first")
             self.assertEqual(archive.read("02-second-track.mp3"), b"second")
+            self.assertEqual(archive.read("03-third-track.mp3"), b"third")
 
     def test_genuine_mix_settings_are_saved_for_each_track(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+        playlist = self.make_playlist()
         track = self.make_track(playlist)
         self.client.force_login(self.make_staff_user())
 
@@ -156,12 +152,11 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(track.mix_end_seconds, 18)
 
     def test_unavailable_tracks_are_disabled_and_bulk_selection_controls_exist(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+        playlist = self.make_playlist()
         unavailable = Track.objects.create(
             playlist=playlist,
             title="Unavailable song",
             availability=Track.Availability.UNAVAILABLE,
-            rights_confirmed=True,
         )
         self.client.force_login(self.make_staff_user())
 
@@ -175,7 +170,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertNotContains(response, f'name="include_{unavailable.pk}" checked')
 
     def test_genuine_mix_generation_saves_settings_before_processing(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+        playlist = self.make_playlist()
         track = self.make_track(playlist)
         self.client.force_login(self.make_staff_user())
 
@@ -220,7 +215,6 @@ class PlaylistCatalogTests(TestCase):
             availability=Track.Availability.UNAVAILABLE,
             unavailable_reason="This video is not available in your country.",
             sort_order=1,
-            rights_confirmed=True,
         )
 
         detail = self.client.get(
@@ -257,26 +251,24 @@ class PlaylistCatalogTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_sync_requires_staff_and_explicit_rights_confirmation(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+    def test_sync_requires_staff_but_not_rights_confirmation(self):
+        playlist = self.make_playlist()
         url = reverse("request_playlist_sync", kwargs={"slug": playlist.slug})
 
         anonymous_response = self.client.post(url)
         self.assertEqual(anonymous_response.status_code, 302)
 
         self.client.force_login(self.make_staff_user())
-        playlist.rights_confirmed = False
-        playlist.save()
         response = self.client.post(url)
         playlist.refresh_from_db()
 
         self.assertRedirects(
             response, reverse("playlist_detail", kwargs={"slug": playlist.slug})
         )
-        self.assertEqual(playlist.sync_status, "idle")
+        self.assertEqual(playlist.sync_status, "pending")
 
     def test_sync_request_queues_once(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+        playlist = self.make_playlist()
         self.client.force_login(self.make_staff_user())
         url = reverse("request_playlist_sync", kwargs={"slug": playlist.slug})
 
@@ -289,7 +281,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(Playlist.objects.get(pk=playlist.pk).sync_status, "pending")
 
     def test_staff_can_clear_a_stuck_sync_status(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="syncing")
+        playlist = self.make_playlist(sync_status="syncing")
         self.client.force_login(self.make_staff_user())
 
         response = self.client.post(
@@ -302,7 +294,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(playlist.sync_error, "")
 
     def test_recover_sync_does_not_change_other_sync_states(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="pending")
+        playlist = self.make_playlist(sync_status="pending")
         self.client.force_login(self.make_staff_user())
 
         self.client.post(
@@ -335,7 +327,7 @@ class PlaylistCatalogTests(TestCase):
         )
 
     def test_removal_deletes_audio_and_excludes_track_from_future_sync(self):
-        playlist = self.make_playlist(rights_confirmed=True)
+        playlist = self.make_playlist()
         track = self.make_track(playlist, source_video_id="Removed123")
         stored_path = Path(track.audio_file.path)
         self.client.force_login(self.make_staff_user())
@@ -357,7 +349,7 @@ class PlaylistCatalogTests(TestCase):
         )
 
     def test_sync_adds_only_new_tracks_and_preserves_existing_order(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="syncing")
+        playlist = self.make_playlist(sync_status="syncing")
         existing = self.make_track(
             playlist,
             title="Already here",
@@ -418,7 +410,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertIsNotNone(playlist.last_synced)
 
     def test_sync_marks_unavailable_entries_and_continues_to_later_tracks(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="syncing")
+        playlist = self.make_playlist(sync_status="syncing")
 
         class FakeYoutubeDL:
             def __init__(self, options):
@@ -477,7 +469,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(playlist.sync_status, "idle")
 
     def test_later_sync_retries_and_recovers_unavailable_track_in_place(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="syncing")
+        playlist = self.make_playlist(sync_status="syncing")
         track = Track.objects.create(
             playlist=playlist,
             title="Unavailable song",
@@ -485,7 +477,6 @@ class PlaylistCatalogTests(TestCase):
             availability=Track.Availability.UNAVAILABLE,
             unavailable_reason="Temporary failure",
             sort_order=4,
-            rights_confirmed=True,
         )
 
         class FakeYoutubeDL:
@@ -524,7 +515,7 @@ class PlaylistCatalogTests(TestCase):
         self.assertEqual(track.audio_file.read(), b"recovered audio")
 
     def test_sync_worker_marks_failed_sync_for_studio(self):
-        playlist = self.make_playlist(rights_confirmed=True, sync_status="pending")
+        playlist = self.make_playlist(sync_status="pending")
         output = io.StringIO()
         errors = io.StringIO()
         with (

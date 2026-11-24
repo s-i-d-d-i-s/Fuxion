@@ -25,16 +25,15 @@
     <section class="playlist-grid" aria-label="Playlists">
       {% for playlist in playlists %}
         <article class="playlist-card">
-          <a class="playlist-art art-{{ playlist.category }}" href="{% url 'playlist_detail' playlist.slug %}" aria-label="Open {{ playlist.title }}">
+          <a class="playlist-art" href="{% url 'playlist_detail' playlist.slug %}" aria-label="Open {{ playlist.title }}">
             <span class="art-mark" aria-hidden="true">♫</span>
             <span class="art-count">{{ playlist.track_count }} TRACK{{ playlist.track_count|pluralize|upper }}</span>
           </a>
           <div class="playlist-info">
             <div class="playlist-title-line">
               <h2><a href="{% url 'playlist_detail' playlist.slug %}">{{ playlist.title }}</a></h2>
-              <span class="genre">{{ playlist.get_category_display }}</span>
             </div>
-            <p>{% if playlist.description %}{{ playlist.description|truncatechars:95 }}{% else %}{{ playlist.get_category_display }} · YouTube Music{% endif %}</p>
+            <p>YouTube Music playlist</p>
             <a class="open-link" href="{% url 'playlist_detail' playlist.slug %}">Open playlist <span aria-hidden="true">→</span></a>
           </div>
         </article>

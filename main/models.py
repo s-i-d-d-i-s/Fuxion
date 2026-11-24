@@ -12,26 +12,10 @@ from django.utils.text import slugify
 
 
 class Playlist(models.Model):
-    class Category(models.TextChoices):
-        POP = "pop", "Pop"
-        ELECTRONIC = "electronic", "Electronic"
-        ROCK = "rock", "Rock"
-        RNB = "rnb", "R&B"
-        HIP_HOP = "hiphop", "Hip-hop"
-        OTHER = "other", "Other"
-
     title = models.CharField(max_length=160)
     slug = models.SlugField(max_length=180, unique=True, blank=True)
     source_url = models.URLField("playlist link", max_length=500)
-    description = models.TextField(blank=True, max_length=600)
-    category = models.CharField(
-        max_length=16, choices=Category.choices, default=Category.POP
-    )
     featured = models.BooleanField(default=False)
-    rights_confirmed = models.BooleanField(
-        default=False,
-        help_text="Confirm you own the music or are authorized to download it.",
-    )
     sync_status = models.CharField(
         max_length=12,
         choices=(
@@ -82,7 +66,7 @@ class Playlist(models.Model):
         if self.pk:
             old_mix_settings = (
                 Playlist.objects.filter(pk=self.pk)
-                .values("crossfade_seconds", "rights_confirmed")
+                .values("crossfade_seconds")
                 .first()
             )
         if not self.slug:
@@ -94,9 +78,9 @@ class Playlist(models.Model):
                 suffix += 1
             self.slug = candidate
         super().save(*args, **kwargs)
-        if old_mix_settings and (
-            old_mix_settings["crossfade_seconds"] != self.crossfade_seconds
-            or old_mix_settings["rights_confirmed"] != self.rights_confirmed
+        if (
+            old_mix_settings
+            and old_mix_settings["crossfade_seconds"] != self.crossfade_seconds
         ):
             self.invalidate_mix()
 
@@ -140,10 +124,6 @@ class Track(models.Model):
             validate_audio_size,
         ],
     )
-    rights_confirmed = models.BooleanField(
-        default=False,
-        help_text="Confirm you own this audio or are authorized to distribute it.",
-    )
     sort_order = models.PositiveIntegerField(default=0)
     include_in_mix = models.BooleanField(default=True)
     mix_start_seconds = models.FloatField(
@@ -183,7 +163,6 @@ class Track(models.Model):
                     "playlist_id",
                     "audio_file",
                     "availability",
-                    "rights_confirmed",
                     "sort_order",
                     "include_in_mix",
                     "mix_start_seconds",
@@ -196,7 +175,6 @@ class Track(models.Model):
             "playlist_id": self.playlist_id,
             "audio_file": self.audio_file.name,
             "availability": self.availability,
-            "rights_confirmed": self.rights_confirmed,
             "sort_order": self.sort_order,
             "include_in_mix": self.include_in_mix,
             "mix_start_seconds": self.mix_start_seconds,

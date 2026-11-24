@@ -18,7 +18,6 @@ class GenuineMixError(Exception):
 def build_genuine_mix(playlist, output_path):
     tracks = list(
         playlist.tracks.filter(
-            rights_confirmed=True,
             availability=Track.Availability.AVAILABLE,
             include_in_mix=True,
         )
@@ -26,7 +25,7 @@ def build_genuine_mix(playlist, output_path):
         .order_by("sort_order", "pk")
     )
     if not tracks:
-        raise GenuineMixError("Select at least one available, rights-confirmed track.")
+        raise GenuineMixError("Select at least one available track.")
     if len(tracks) > 100:
         raise GenuineMixError("A Genuine Mix can contain up to 100 tracks.")
     if sum(track.audio_file.size for track in tracks) > 2 * 1024 * 1024 * 1024:

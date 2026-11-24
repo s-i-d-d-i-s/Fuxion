@@ -75,10 +75,6 @@ def validate_playlist_url(url):
 
 def sync_playlist(playlist_id):
     playlist = Playlist.objects.get(pk=playlist_id)
-    if not playlist.rights_confirmed:
-        raise PlaylistSyncError(
-            "Confirm in the playlist settings that you own or may download this music."
-        )
     validate_playlist_url(playlist.source_url)
     ffmpeg_location = find_ffmpeg_location()
 
@@ -265,7 +261,6 @@ def sync_playlist(playlist_id):
                         title=title,
                         source_video_id=video_id,
                         sort_order=next_order + 1,
-                        rights_confirmed=True,
                     )
                 else:
                     track.title = title
@@ -304,7 +299,6 @@ def _record_unavailable(playlist, track, video_id, title, reason, next_order):
             title=title,
             source_video_id=video_id,
             sort_order=next_order + 1,
-            rights_confirmed=True,
         )
     else:
         track.title = title
