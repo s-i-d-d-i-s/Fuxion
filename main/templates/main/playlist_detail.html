@@ -1,0 +1,170 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#151713">
+  <title>{{ playlist.title }} — Fuxion</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'main/favicon.svg' %}">
+  <link rel="stylesheet" href="{% static 'main/catalog.css' %}">
+</head>
+<body>
+  <header class="site-header">
+    <a class="wordmark" href="{% url 'playlist_list' %}"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>fuxion<span class="wordmark-period">.</span></a>
+    <a class="header-link" href="/admin/">Studio <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main class="detail" data-sync-active="{% if playlist.sync_status == 'pending' or playlist.sync_status == 'syncing' %}true{% else %}false{% endif %}">
+    <a class="back-link" href="{% url 'playlist_list' %}">← <span>Library</span></a>
+
+    {% if messages %}
+      <div class="messages" role="status">
+        {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <section class="playlist-heading">
+      <div class="detail-art art-{{ playlist.category }}" aria-hidden="true">♫</div>
+      <div class="playlist-heading-copy">
+        <p class="eyebrow">{{ playlist.get_category_display }}{% if playlist.featured %} · FEATURED{% endif %}</p>
+        <h1>{{ playlist.title }}<span class="wordmark-period">.</span></h1>
+        {% if playlist.description %}<p class="playlist-description">{{ playlist.description }}</p>{% endif %}
+        <a class="source-link" href="{{ playlist.source_url }}" target="_blank" rel="noopener noreferrer">Open YouTube Music ↗</a>
+      </div>
+    </section>
+
+    <section class="tracks-section">
+      <div class="tracks-toolbar">
+        <div>
+          <h2>Tracks <span>{{ tracks|length }}</span></h2>
+          {% if playlist.last_synced %}<p class="sync-time">Last synced {{ playlist.last_synced|date:"M j, Y · H:i" }}</p>{% endif %}
+        </div>
+        <div class="toolbar-actions">
+          {% if tracks %}
+            <a class="button button-outline" href="{% url 'download_playlist' playlist.slug %}">Download ZIP <span aria-hidden="true">↓</span></a>
+          {% endif %}
+          {% if can_manage %}
+            <form method="post" action="{% url 'request_playlist_sync' playlist.slug %}">
+              {% csrf_token %}
+              <button class="button button-primary" type="submit" {% if playlist.sync_status == "pending" or playlist.sync_status == "syncing" or not playlist.rights_confirmed %}disabled{% endif %}>
+                {% if playlist.sync_status == "pending" %}Queued…{% elif playlist.sync_status == "syncing" %}Syncing…{% else %}Sync playlist ↻{% endif %}
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if can_manage and playlist.sync_status == "failed" and playlist.sync_error %}
+        <p class="sync-error" role="alert">{{ playlist.sync_error }}</p>
+      {% elif playlist.sync_status == "pending" or playlist.sync_status == "syncing" %}
+        <p class="sync-notice" role="status">Sync in progress. Your existing tracks and their order are safe.</p>
+      {% elif can_manage and not playlist.rights_confirmed %}
+        <p class="sync-notice" role="status">Confirm music rights in Studio before syncing.</p>
+      {% endif %}
+
+      {% if tracks %}
+        <ol class="track-list">
+          {% for track in tracks %}
+            <li class="track-row" data-track-row>
+              {% if track.availability == "available" and track.audio_file %}
+                <button class="play-button" type="button" aria-label="Play {{ track.title }}" data-play-track data-src="{{ track.audio_file.url }}" data-title="{{ track.title }}">
+                  <span aria-hidden="true">▶</span>
+                </button>
+              {% else %}
+                <span class="unavailable-icon" aria-hidden="true">—</span>
+              {% endif %}
+              <span class="track-number">{{ forloop.counter|stringformat:"02d" }}</span>
+              <span class="track-title">
+                {{ track.title }}
+                {% if track.availability == "unavailable" %}
+                  <span class="unavailable-label" title="{{ track.unavailable_reason }}">Unavailable</span>
+                {% endif %}
+              </span>
+              <span class="track-format">{% if track.availability == "available" %}{{ track.file_extension|slice:"1:"|upper }}{% else %}—{% endif %}</span>
+              {% if can_manage %}
+                <span class="track-actions">
+                  <form method="post" action="{% url 'move_track' playlist.slug track.pk 'up' %}">
+                    {% csrf_token %}<button type="submit" aria-label="Move {{ track.title }} up" {% if forloop.first %}disabled{% endif %}>↑</button>
+                  </form>
+                  <form method="post" action="{% url 'move_track' playlist.slug track.pk 'down' %}">
+                    {% csrf_token %}<button type="submit" aria-label="Move {{ track.title }} down" {% if forloop.last %}disabled{% endif %}>↓</button>
+                  </form>
+                  <form method="post" action="{% url 'remove_track' playlist.slug track.pk %}" onsubmit="return confirm('Remove this track from the app? It will not be added again during sync.');">
+                    {% csrf_token %}<button class="remove-button" type="submit" aria-label="Remove {{ track.title }}">×</button>
+                  </form>
+                </span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <div class="empty-tracks">
+          <p>No tracks yet.</p>
+          {% if can_manage and playlist.rights_confirmed %}<span>Sync this playlist to add its music.</span>{% endif %}
+        </div>
+      {% endif %}
+    </section>
+  </main>
+
+  <aside class="player-dock" id="player-dock" hidden aria-label="Music player">
+    <div class="player-track"><span class="player-note" aria-hidden="true">♫</span><span id="player-title">Choose a track</span></div>
+    <audio id="audio-player" controls preload="metadata"></audio>
+  </aside>
+
+  <footer class="site-footer"><span>FUXION</span><span>YOUR MUSIC, KEPT IN ORDER.</span></footer>
+  <script>
+    (() => {
+      const audio = document.getElementById("audio-player");
+      const dock = document.getElementById("player-dock");
+      const title = document.getElementById("player-title");
+      const buttons = [...document.querySelectorAll("[data-play-track]")];
+      let activeIndex = -1;
+
+      function updatePlayButtons() {
+        buttons.forEach((button, index) => {
+          const playing = index === activeIndex && !audio.paused;
+          button.querySelector("span").textContent = playing ? "Ⅱ" : "▶";
+          button.setAttribute(
+            "aria-label",
+            `${playing ? "Pause" : "Play"} ${button.dataset.title}`
+          );
+          button.setAttribute("aria-pressed", String(playing));
+        });
+      }
+
+      function playAt(index) {
+        const button = buttons[index];
+        if (!button) return;
+        activeIndex = index;
+        title.textContent = button.dataset.title;
+        dock.hidden = false;
+        updatePlayButtons();
+        if (audio.src !== new URL(button.dataset.src, location.href).href) {
+          audio.src = button.dataset.src;
+        }
+        audio.play().catch(() => {
+          title.textContent = `${button.dataset.title} · press play to start`;
+        });
+      }
+
+      buttons.forEach((button, index) => {
+        button.addEventListener("click", () => {
+          if (activeIndex === index && !audio.paused) audio.pause();
+          else playAt(index);
+        });
+      });
+
+      audio.addEventListener("play", updatePlayButtons);
+      audio.addEventListener("pause", updatePlayButtons);
+      audio.addEventListener("ended", () => {
+        if (activeIndex >= 0 && activeIndex + 1 < buttons.length) playAt(activeIndex + 1);
+      });
+
+      if (document.querySelector("[data-sync-active='true']")) {
+        window.setTimeout(() => window.location.reload(), 5000);
+      }
+    })();
+  </script>
+</body>
+</html>
