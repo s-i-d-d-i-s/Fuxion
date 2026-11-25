@@ -61,5 +61,3 @@ class TrackAdmin(admin.ModelAdmin):
     list_editable = ("sort_order", "include_in_mix")
     readonly_fields = ("source_video_id", "availability", "unavailable_reason")
 
-    def has_delete_permission(self, request, obj=None):
-        return False
