@@ -83,6 +83,7 @@ def sync_playlist(playlist_id):
         "quiet": True,
         "no_warnings": True,
         "ignoreerrors": True,
+        "cookiesfrombrowser": ("brave",),
     }
     try:
         with YoutubeDL(info_options) as ydl:
@@ -184,6 +185,7 @@ def sync_playlist(playlist_id):
                 "noplaylist": True,
                 "quiet": True,
                 "no_warnings": True,
+                "cookiesfrombrowser": ("brave",),
                 "postprocessors": [
                     {
                         "key": "FFmpegExtractAudio",
